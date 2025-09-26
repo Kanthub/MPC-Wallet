@@ -14,6 +14,8 @@ import (
 )
 
 func main() {
+
+	// 日志初始化
 	log.Root().SetHandler(
 		log.LvlFilterHandler(
 			log.LvlInfo,

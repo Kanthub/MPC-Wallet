@@ -43,6 +43,18 @@ func (c *Counter) satisfied(minNumber int) []string {
 	return ret
 }
 
+/*
+用户 → Manager 对外的 API (比如 GenerateKey / SignTx / SignMessage) → 调用 sign()
+
+向 wsServer 注册一个消息通道，用来接收节点的签名结果。
+
+起一个 goroutine，不停监听 respChan，处理节点返回的签名响应。
+
+调用 m.sendToNodes(...) 把签名请求广播给所有 Approver 节点。
+
+等待超时或收齐结果，返回第一个合法签名。
+*/
+
 func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, method tss.Method) (tss.SignResponse, error) {
 	respChan := make(chan server.ResponseMsg)
 	stopChan := make(chan struct{})
@@ -145,22 +157,31 @@ func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, 
 	return *validSignResponse, nil
 }
 
+/*
+
+把用户的签名请求打包成 RPC 消息，然后通过 wsServer 发给 Approver 节点
+*/
+
 func (m *Manager) sendToNodes(ctx types.Context, request interface{}, method tss.Method, errSendChan chan struct{}) {
-	nodes := ctx.Approvers()
+	nodes := ctx.Approvers() // 准备目标节点列表
 	nodeRequest := tss.NodeSignRequest{
-		ClusterPublicKey: ctx.TssInfos().ClusterPubKey,
+		ClusterPublicKey: ctx.TssInfos().ClusterPubKey, // 构造请求体（NodeSignRequest）
 		Timestamp:        time.Now().UnixMilli(),
 		Nodes:            ctx.Approvers(),
 		RequestBody:      request,
 	}
-	requestBz, err := json.Marshal(nodeRequest)
+	requestBz, err := json.Marshal(nodeRequest) // 序列化为 JSON
 	if err != nil {
 		log.Error("failed to json marshal node request", err)
 		errSendChan <- struct{}{}
 		return
 	}
 
+	// 封装成 Tendermint RPCRequest
+	// 使用 Tendermint 的 RPC 协议包装（相当于把请求转成标准 RPC 格式）, 里面带上 RequestId，这样对方返回时可以匹配请求
 	rpcRequest := tmtypes.NewRPCRequest(tmtypes.JSONRPCStringID(ctx.RequestId()), method.String(), requestBz)
+
+	// 遍历每个节点，开启 goroutine 并通过 wsServer.SendMsg 发送请求, 如果失败，就往 errSendChan 写一个信号，通知外层签名流程
 	for _, node := range nodes {
 		go func(node string, request tmtypes.RPCRequest) {
 			if err := m.wsServer.SendMsg(

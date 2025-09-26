@@ -13,6 +13,8 @@ func (registry *Registry) Register(r *gin.Engine) {
 
 	v1Router := r.Group("/api/v1")
 	v1Router.POST("/sign/state", registry.SignStateHandler())
+	v1Router.POST("/sign/eip7702", registry.SignEIP7702Handler())
+
 	v1Router.GET("/metrics", registry.PrometheusHandler())
 
 	v1Router.GET("/admin/height", registry.GetHeightHandler())

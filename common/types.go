@@ -29,6 +29,13 @@ type TransactionSignRequest struct {
 	ElectionId  uint64 `json:"election_id"`
 }
 
+type EIP7702SignRequest struct {
+	ChainId    string `json:"chain_id"`
+	Address    string `json:"address"`
+	Nonce      uint64 `json:"nonce"`
+	ElectionId uint64 `json:"election_id"`
+}
+
 func (tsr TransactionSignRequest) String() string {
 	return fmt.Sprintf("message_hash: %v, election_id: %d", tsr.MessageHash, tsr.ElectionId)
 }

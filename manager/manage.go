@@ -148,7 +148,7 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if sig := m.getStateSignature(digestBz); len(sig) > 0 {
+	if sig := m.getStateSignature(digestBz); len(sig) > 0 { // 如果这个 digest 已经签过了，直接拿本地缓存的签名返回，避免重复签名
 		log.Info("get stored signature ", "digest", hex.EncodeToString(digestBz), "sig", hex.EncodeToString(sig))
 		response := tss.BatchSubmitterResponse{
 			Signature: sig,
@@ -168,7 +168,7 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	//metrics
 	m.metics.ActiveMembersCount.Set(float64(len(tssInfo.TssMembers)))
 
-	availableNodes := m.availableNodes(tssInfo.TssMembers)
+	availableNodes := m.availableNodes(tssInfo.TssMembers) // 获取当前 TSS 集群信息
 	if len(availableNodes) < tssInfo.Threshold+1 {
 		return nil, errors.New("not enough available nodes to sign state")
 	}
@@ -177,10 +177,10 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 		WithAvailableNodes(availableNodes).
 		WithTssInfo(tssInfo).
 		WithRequestId(randomRequestId()).
-		WithElectionId(tssInfo.ElectionId)
+		WithElectionId(tssInfo.ElectionId) // 创建一个签名上下文：包含节点列表、tss 信息、请求 ID、选举 ID 等元信息
 
 	// ask tss nodes for the agreement
-	ctx, err = m.agreement(ctx, request, tss.AskMessageHash)
+	ctx, err = m.agreement(ctx, request, tss.AskMessageHash) // 先跑一轮 共识/投票，确认哪些节点同意签这个 hash
 	if err != nil {
 		m.metics.SignCount.Add(1)
 		return nil, err
@@ -192,7 +192,7 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	m.metics.ApproveNumber.Set(float64(len(ctx.Approvers())))
 
 	request.ElectionId = tssInfo.ElectionId
-	resp, signErr = m.sign(ctx, request, digestBz, tss.TransactionSign)
+	resp, signErr = m.sign(ctx, request, digestBz, tss.TransactionSign) // 发起签名
 
 	if signErr != nil {
 		m.metics.SignCount.Add(1)

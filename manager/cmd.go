@@ -71,12 +71,14 @@ func run(cmd *cobra.Command) error {
 	}
 	observer.Start()
 
+	// 启动 Manager
 	manager, err := NewManager(wsServer, queryService, managerStore, config)
 	if err != nil {
 		return err
 	}
 	manager.Start()
 
+	// 用 Gin 框架启动 HTTP Server，把 manager 暴露出去
 	registry := router.NewRegistry(manager, managerStore)
 	r := gin.Default()
 	registry.Register(r)
